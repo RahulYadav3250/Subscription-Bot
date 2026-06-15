@@ -1,6 +1,6 @@
 # 🤖 Telegram Subscription Bot
 
-Deployed on **Koyeb** (free hosting, always on) with **Supabase** (free PostgreSQL database, persistent forever). No credit card required for either.
+Deployed on **Railway** (free via GitHub Student Pack or ~$1-2/month) with **Supabase** (free PostgreSQL database, no credit card). Auto-deploys from GitHub on every push.
 
 ---
 
@@ -45,9 +45,9 @@ telegram-subscription-bot/
 
 1. Open Telegram → search **@BotFather** → send `/newbot`
 2. Enter a display name, then a username ending in `bot`
-3. Copy the token → save as **`BOT_TOKEN`**
+3. Copy the token (e.g. `7123456789:AAF...`) → save as **`BOT_TOKEN`**
 
-Set the command menu — send `/setcommands` to BotFather, select your bot, paste:
+Set the command menu — send `/setcommands` to BotFather, select your bot, paste exactly:
 ```
 start - Welcome & intro
 subscribe - See plans & subscribe
@@ -63,8 +63,9 @@ help - Show all commands
 1. Telegram → pencil icon → **New Channel** → name it → set **Private** → Create
 2. Add your bot as Administrator:
    - Open channel → tap channel name → **Administrators** → **Add Admin**
-   - Search your bot → enable: ✅ Add Members ✅ Ban Users ✅ Invite Users via Link → Save
-3. Get Channel ID — forward any message from the channel to **@userinfobot**
+   - Search your bot → enable: ✅ Add Members  ✅ Ban Users  ✅ Invite Users via Link → Save
+3. Get Channel ID:
+   - Forward any message from the channel to **@userinfobot**
    - It replies with `Chat ID: -1001234567890` → save as **`CHANNEL_ID`**
 
 ---
@@ -73,48 +74,59 @@ help - Show all commands
 
 1. Go to [developer.paypal.com](https://developer.paypal.com) — log in with your **Business** account
 2. **Dashboard → My Apps & Credentials → Sandbox tab → Create App**
-3. Name it → Create App → copy **Client ID** and **Secret**
+3. Name it anything → Create App → copy **Client ID** and **Secret**
 
 > Personal PayPal accounts cannot use the Subscriptions API. Upgrade free at paypal.com.
 
 ---
 
-## STEP 4 — Set Up Supabase (Free Database)
-
-Supabase gives you a free hosted PostgreSQL database — no credit card needed.
+## STEP 4 — Set Up Supabase (Free Database, No Credit Card)
 
 ### 4a. Create account
 1. Go to [supabase.com](https://supabase.com) → **Start for free**
-2. Sign up with GitHub or email — no credit card required
+2. Sign up with GitHub or email — **no credit card required**
 
 ### 4b. Create a project
 1. Click **New Project**
 2. Fill in:
    - **Name:** `subscription-bot`
-   - **Database Password:** create a strong password → **save it somewhere safe**
-   - **Region:** pick closest to your users
-3. Click **Create new project** — takes about 1 minute to provision
+   - **Database Password:** create a strong password → **save it**
+   - **Region:** pick the one closest to your users
+3. Click **Create new project** — takes about 1 minute
 
-### 4c. Get the connection string
-1. In your project → left sidebar → **Project Settings** (gear icon)
-2. Click **Database**
-3. Scroll down to **Connection string** → select **URI** tab
-4. Copy the string — it looks like:
+### 4c. Get your connection string
+1. Left sidebar → **Project Settings** (gear icon) → **Database**
+2. Scroll to **Connection string** → select the **URI** tab
+3. Copy the string — looks like:
    ```
    postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxxxxxxxx.supabase.co:5432/postgres
    ```
-5. Replace `[YOUR-PASSWORD]` with the password you created in step 4b
-6. Save this as **`DATABASE_URL`**
+4. Replace `[YOUR-PASSWORD]` with the password from step 4b
+5. Save this as **`DATABASE_URL`**
 
-> You do NOT need to create any tables manually. The bot creates all tables automatically on first startup.
+> You do NOT need to create any tables. The bot creates everything automatically on first startup.
 
 ---
 
-## STEP 5 — Push Code to GitHub
+## STEP 5 — Set Up Railway
 
-1. Create a new repository at [github.com](https://github.com) — name it `telegram-subscription-bot`
-2. Make sure it is **Private** (your code contains sensitive references)
-3. In your local project folder run:
+### Option A — GitHub Student Pack (no credit card)
+1. Go to [education.github.com](https://education.github.com) → **Get Student Benefits**
+2. Verify your student status (takes a few minutes to a few days)
+3. Once approved, go to [railway.app](https://railway.app) → **Login with GitHub**
+4. Railway automatically applies your $13/month free credit — no card ever needed
+
+### Option B — Regular account (~$1-2/month)
+1. Go to [railway.app](https://railway.app) → **Login with GitHub**
+2. Add a credit/debit card under **Account → Billing**
+3. Usage for this bot will be well under $2/month
+
+---
+
+## STEP 6 — Push Code to GitHub
+
+1. Create a **private** repository at [github.com](https://github.com) named `telegram-subscription-bot`
+2. In your local project folder run:
 
 ```bash
 git init
@@ -125,50 +137,20 @@ git remote add origin https://github.com/YOUR_USERNAME/telegram-subscription-bot
 git push -u origin main
 ```
 
-> `.env` is in `.gitignore` — never commit it. Your secrets stay local.
+> `.env` is already in `.gitignore` — never commit it. Your secrets stay local only.
 
 ---
 
-## STEP 6 — Configure Environment Variables Locally
+## STEP 7 — Create PayPal Billing Plans (run once locally)
 
-```bash
-cp .env.example .env
-```
-
-Open `.env` and fill in all values:
-```env
-BOT_TOKEN=7123456789:AAF...
-CHANNEL_ID=-1001234567890
-BOT_USERNAME=mychannelsubbot
-
-PAYPAL_CLIENT_ID=AaBbCcDd...
-PAYPAL_CLIENT_SECRET=EeFfGgHh...
-PAYPAL_MODE=sandbox
-
-PAYPAL_PLAN_ID_MONTHLY=       ← fill after step 7
-PAYPAL_PLAN_ID_QUARTERLY=     ← fill after step 7
-PAYPAL_PLAN_ID_BIANNUAL=      ← fill after step 7
-PAYPAL_PLAN_ID_ANNUAL=        ← fill after step 7
-
-DATABASE_URL=postgresql://postgres:yourpassword@db.xxxx.supabase.co:5432/postgres
-
-PORT=3000
-WEBHOOK_DOMAIN=https://your-app.koyeb.app   ← fill after step 8
-WEBHOOK_SECRET=any-random-32-character-string
-```
-
----
-
-## STEP 7 — Create PayPal Billing Plans
-
-Run this once on your local machine (with `.env` filled in):
+Make sure your `.env` is filled in with at least `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE=sandbox`, and `DATABASE_URL`, then run:
 
 ```bash
 npm install
 node src/paypal/createPlan.js
 ```
 
-Output:
+Output will look like:
 ```
 ✅ Connected to Supabase PostgreSQL
 ✅ Product created: PROD-XXXXXXXXXXXX
@@ -184,45 +166,27 @@ PAYPAL_PLAN_ID_BIANNUAL=P-3EF...
 PAYPAL_PLAN_ID_ANNUAL=P-4GH...
 ```
 
-Paste the 4 plan IDs into your `.env`, then push to GitHub:
-```bash
-git add .
-git commit -m "Add PayPal plan IDs"
-git push
-```
+Paste the 4 plan IDs into your `.env`. You'll add them to Railway in the next step.
 
 ---
 
-## STEP 8 — Deploy to Koyeb
+## STEP 8 — Deploy to Railway
 
-Koyeb is free with no credit card required — just an email signup.
+### 8a. Create a new project
+1. Go to [railway.app](https://railway.app) → **New Project**
+2. Select **Deploy from GitHub repo**
+3. Select your `telegram-subscription-bot` repository
+4. Railway detects Node.js automatically and starts the first deploy
 
-### 8a. Create account
-1. Go to [koyeb.com](https://koyeb.com) → **Get Started Free**
-2. Sign up with GitHub or email — no credit card
-
-### 8b. Create a new App
-1. In Koyeb dashboard → **Create App**
-2. Select **GitHub** as the source
-3. Connect your GitHub account if not already
-4. Select your `telegram-subscription-bot` repository
-5. Select branch: `main`
-
-### 8c. Configure the service
-- **Service name:** `subscription-bot`
-- **Instance type:** Free
-- **Region:** pick any (Frankfurt or Washington are reliable)
-- **Build command:** `npm install`
-- **Run command:** `node src/index.js`
-- **Port:** `3000`
-
-### 8d. Add environment variables
-In the **Environment variables** section, add every variable from your `.env`:
+### 8b. Add environment variables
+1. Click on your service inside the project
+2. Go to the **Variables** tab
+3. Click **Add Variable** and add every key from your `.env`:
 
 | Key | Value |
 |-----|-------|
-| `BOT_TOKEN` | Your bot token |
-| `CHANNEL_ID` | Your channel ID |
+| `BOT_TOKEN` | Your bot token from BotFather |
+| `CHANNEL_ID` | Your channel ID (e.g. `-1001234567890`) |
 | `BOT_USERNAME` | Bot username without @ |
 | `PAYPAL_CLIENT_ID` | From Step 3 |
 | `PAYPAL_CLIENT_SECRET` | From Step 3 |
@@ -232,19 +196,18 @@ In the **Environment variables** section, add every variable from your `.env`:
 | `PAYPAL_PLAN_ID_BIANNUAL` | From Step 7 |
 | `PAYPAL_PLAN_ID_ANNUAL` | From Step 7 |
 | `DATABASE_URL` | From Step 4c |
-| `WEBHOOK_SECRET` | Your random string |
-| `WEBHOOK_DOMAIN` | Leave blank for now — fill after first deploy |
+| `WEBHOOK_SECRET` | Any random 32-character string |
+| `WEBHOOK_DOMAIN` | Leave blank for now — fill after step 8c |
 | `PORT` | `3000` |
 
-### 8e. Deploy
-Click **Deploy**. First deploy takes 2-3 minutes.
+Railway redeploys automatically after saving variables.
 
-### 8f. Get your public URL and update WEBHOOK_DOMAIN
-1. After deploy finishes, Koyeb shows your URL at the top — looks like `https://subscription-bot-yourname.koyeb.app`
-2. Copy it
-3. In Koyeb → your service → **Settings → Environment variables**
-4. Set `WEBHOOK_DOMAIN` = `https://subscription-bot-yourname.koyeb.app`
-5. Click **Save** — Koyeb redeploys automatically
+### 8c. Get your public URL and set WEBHOOK_DOMAIN
+1. In your service → **Settings** tab → **Networking** → **Generate Domain**
+2. Railway gives you a URL like `https://subscription-bot-production-xxxx.up.railway.app`
+3. Copy it
+4. Go back to **Variables** → set `WEBHOOK_DOMAIN` = that URL
+5. Railway redeploys automatically
 
 ---
 
@@ -252,7 +215,7 @@ Click **Deploy**. First deploy takes 2-3 minutes.
 
 1. Go to [developer.paypal.com](https://developer.paypal.com) → **Dashboard → Webhooks → Sandbox tab**
 2. Click **Add Webhook**
-3. URL: `https://your-app.koyeb.app/paypal/webhook`
+3. URL: `https://your-app.up.railway.app/paypal/webhook`
 4. Select all 7 events:
    - ✅ `BILLING.SUBSCRIPTION.ACTIVATED`
    - ✅ `BILLING.SUBSCRIPTION.CANCELLED`
@@ -269,15 +232,15 @@ Click **Deploy**. First deploy takes 2-3 minutes.
 
 1. Go to [developer.paypal.com → Sandbox → Accounts](https://developer.paypal.com/dashboard/accounts)
 2. Find the pre-created buyer account → three dots → **View/Edit** → note email + password
-3. Open your bot → `/subscribe` → pick a plan → tap PayPal button
-4. Log in with sandbox buyer credentials → approve
+3. Open your bot in Telegram → `/subscribe` → pick any plan → tap the PayPal button
+4. Log in with sandbox credentials → approve the subscription
 
-**Verify all of this works:**
-- [ ] Bot sends "Subscription Active" message
-- [ ] Bot sends a channel invite link
-- [ ] You can join the channel
-- [ ] `/status` shows plan + next payment date
-- [ ] `/cancel` removes you from channel
+**Verify all of this happens:**
+- [ ] Bot sends "Subscription Active" message in Telegram
+- [ ] Bot sends a single-use channel invite link
+- [ ] You can join the channel using that link
+- [ ] `/status` shows correct plan and next auto-pay date
+- [ ] `/cancel` removes you from the channel
 
 ---
 
@@ -288,7 +251,7 @@ Click **Deploy**. First deploy takes 2-3 minutes.
 
 ### 11b. Re-create billing plans for Live
 ```bash
-# Update your local .env temporarily:
+# Update your local .env:
 PAYPAL_CLIENT_ID=<live client id>
 PAYPAL_CLIENT_SECRET=<live secret>
 PAYPAL_MODE=live
@@ -297,8 +260,8 @@ node src/paypal/createPlan.js
 ```
 Copy the 4 new live plan IDs.
 
-### 11c. Update Koyeb environment variables
-In Koyeb → your service → **Settings → Environment variables**, update:
+### 11c. Update Railway environment variables
+In Railway → **Variables**, update:
 - `PAYPAL_CLIENT_ID` → live client ID
 - `PAYPAL_CLIENT_SECRET` → live secret
 - `PAYPAL_MODE` → `live`
@@ -307,12 +270,12 @@ In Koyeb → your service → **Settings → Environment variables**, update:
 ### 11d. Register Live webhook
 - PayPal Developer → **Live tab** → Webhooks → Add same URL + same 7 events
 
-Koyeb redeploys automatically after saving env changes.
+Railway redeploys automatically after saving.
 
 **Go-live checklist:**
 - [ ] `PAYPAL_MODE=live`
-- [ ] Live Client ID + Secret set in Koyeb
-- [ ] `createPlan.js` re-run on live → 4 new plan IDs in Koyeb
+- [ ] Live Client ID + Secret set in Railway
+- [ ] `createPlan.js` re-run with live credentials → 4 new plan IDs in Railway
 - [ ] Live PayPal webhook registered
 - [ ] Test with a real card
 
@@ -320,32 +283,32 @@ Koyeb redeploys automatically after saving env changes.
 
 ## 🔄 Deploying Updates
 
-Push to GitHub → Koyeb redeploys automatically. That's it.
+Push to GitHub → Railway redeploys automatically. Nothing else needed.
 
 ```bash
 git add .
-git commit -m "your change"
+git commit -m "describe your change"
 git push
 ```
 
 ---
 
-## 🛠️ Troubleshooting
+## ⚠️ Troubleshooting
 
 **Bot doesn't respond**
-→ Check Koyeb logs (your service → **Deployments → View logs**). Verify `BOT_TOKEN` and `WEBHOOK_DOMAIN` are correctly set.
+→ Railway → your service → **Deployments** → click the latest deploy → **View Logs**. Look for startup errors. Verify `BOT_TOKEN` and `WEBHOOK_DOMAIN` are set correctly.
 
 **Database connection error on startup**
-→ Verify `DATABASE_URL` is correct and includes your actual password (not `[YOUR-PASSWORD]`). Check Supabase project is not paused (free projects pause after 1 week of inactivity — unpause in Supabase dashboard).
+→ Verify `DATABASE_URL` is correct and your Supabase password is in the URL (not the placeholder `[YOUR-PASSWORD]`). Check your Supabase project is not paused — free projects pause after 7 days of inactivity. Go to [supabase.com](https://supabase.com) → your project → click **Restore**.
 
-**"Plan not configured" error**
-→ You haven't run `node src/paypal/createPlan.js` or forgot to add the 4 plan IDs to Koyeb's environment variables.
+**"Plan not configured" error in bot**
+→ You haven't run `node src/paypal/createPlan.js` or forgot to add the 4 plan IDs to Railway's Variables tab.
 
 **PayPal webhooks not arriving**
-→ Verify the webhook URL in PayPal matches your Koyeb URL exactly. Test it: open `https://your-app.koyeb.app/health` in your browser — should return `{"status":"ok"}`.
-
-**Supabase project paused**
-→ Free Supabase projects pause after 7 days of no activity. Go to [supabase.com](https://supabase.com) → your project → click **Restore**. The bot will resume working immediately. To avoid this, the bot's daily cron job keeps the DB active automatically.
+→ Verify the webhook URL in PayPal matches your Railway URL exactly. Test it in your browser: `https://your-app.up.railway.app/health` should return `{"status":"ok"}`.
 
 **Sandbox works but live payments fail**
-→ You're using sandbox plan IDs with live credentials. Re-run `node src/paypal/createPlan.js` with `PAYPAL_MODE=live` and update all 4 plan IDs in Koyeb.
+→ You're using sandbox plan IDs with live credentials. Re-run `node src/paypal/createPlan.js` with `PAYPAL_MODE=live` and update all 4 plan IDs in Railway Variables.
+
+**Railway charges more than expected**
+→ Railway bills by actual usage. This bot uses roughly 50-100 MB RAM and minimal CPU — well within $1-2/month. Check **Usage** tab in Railway dashboard to see exact consumption.
