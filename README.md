@@ -1,15 +1,13 @@
-# 🤖 Telegram Subscription Bot — Complete Setup Guide
+# 🤖 Telegram Subscription Bot
 
-A production-ready Telegram bot that manages **PayPal recurring subscriptions** with automatic channel access management. Users subscribe via PayPal, get added to your private channel instantly, and auto-pay handles every renewal — no manual work needed.
+Deployed on **Koyeb** (free hosting, always on) with **Supabase** (free PostgreSQL database, persistent forever). No credit card required for either.
 
 ---
 
 ## 📋 Subscription Plans
 
-All users pay via PayPal in USD, regardless of location.
-
-| Plan | Price | Free Trial | Button shown in bot |
-|------|-------|------------|---------------------|
+| Plan | Price | Free Trial | Button in bot |
+|------|-------|------------|---------------|
 | Monthly | $2.99/month | ✅ 7 days | 💎 $2.99/month  •  Most Popular 🔥  •  7-Day Free Trial |
 | Quarterly | $7.99/3 months | ✅ 7 days | 📦 $7.99/3 months  •  10% Off 🎉  •  7-Day Free Trial |
 | 6 Months | $13.99/6 months | ❌ None | 🏷️ $13.99/6 months  •  20% Off 💰 |
@@ -20,75 +18,36 @@ All users pay via PayPal in USD, regardless of location.
 ## 🗂️ Project Structure
 
 ```
-src/
-├── index.js              # Entry point — Grammy bot + Express server
-├── config/
-│   └── plans.js          # All plan definitions (single source of truth)
-├── db/
-│   └── database.js       # SQLite schema & query helpers
-├── paypal/
-│   ├── client.js         # PayPal REST API wrapper
-│   └── createPlan.js     # One-time plan creation script (run once)
-├── handlers/
-│   ├── commands.js       # Bot commands + inline keyboard callbacks
-│   └── webhooks.js       # PayPal webhook event handlers
-├── jobs/
-│   └── scheduler.js      # Daily cron: expiry sweep + trial reminders
-└── utils/
-    └── channel.js        # Add/remove users, generate invite links
-```
-
----
-
-## 🔄 How Auto-Pay Works
-
-PayPal manages the entire billing schedule. Once a user approves their subscription, PayPal charges them automatically on every renewal date. Your bot just listens to webhooks and keeps the database and channel access in sync.
-
-```
-User taps /subscribe
-        │
-        ▼
-Bot shows 4 plan buttons
-        │
-        ▼  (user picks a plan)
-PayPal approval link sent
-        │
-        ▼  (user approves on PayPal)
-BILLING.SUBSCRIPTION.ACTIVATED webhook
-        ├── DB updated (status = trialing or active)
-        ├── User added to channel
-        └── Single-use invite link sent to user
-        │
-        ▼  (PayPal charges automatically on renewal date)
-PAYMENT.SALE.COMPLETED webhook
-        ├── DB updated (period extended)
-        └── "Auto-Pay Successful" message sent to user
-        │
-        ▼  (on cancellation or failure)
-BILLING.SUBSCRIPTION.CANCELLED / SUSPENDED
-        ├── DB updated
-        ├── User removed from channel
-        └── Notification sent
+telegram-subscription-bot/
+├── src/
+│   ├── index.js              # Entry point
+│   ├── config/plans.js       # All plan definitions
+│   ├── db/database.js        # PostgreSQL via Supabase
+│   ├── paypal/
+│   │   ├── client.js         # PayPal REST API wrapper
+│   │   └── createPlan.js     # One-time plan creation script
+│   ├── handlers/
+│   │   ├── commands.js       # Bot commands
+│   │   └── webhooks.js       # PayPal webhook handlers
+│   ├── jobs/scheduler.js     # Daily cron jobs
+│   └── utils/channel.js      # Channel access management
+├── .env.example
+└── README.md
 ```
 
 ---
 
 # 🚀 Step-by-Step Deployment Guide
 
-Follow every step in order. Do not skip ahead.
-
 ---
 
 ## STEP 1 — Create Your Telegram Bot
 
-1. Open Telegram and search for **@BotFather**
-2. Send `/newbot`
-3. Enter a display name (e.g. `My Channel Bot`)
-4. Enter a username ending in `bot` (e.g. `mychannelsubbot`)
-5. BotFather gives you a token like `7123456789:AAF...` — **save this as `BOT_TOKEN`**
+1. Open Telegram → search **@BotFather** → send `/newbot`
+2. Enter a display name, then a username ending in `bot`
+3. Copy the token → save as **`BOT_TOKEN`**
 
-### Set the command menu
-Send `/setcommands` to BotFather, select your bot, then paste this exactly:
+Set the command menu — send `/setcommands` to BotFather, select your bot, paste:
 ```
 start - Welcome & intro
 subscribe - See plans & subscribe
@@ -99,183 +58,202 @@ help - Show all commands
 
 ---
 
-## STEP 2 — Create & Configure the Private Channel
+## STEP 2 — Create the Private Channel
 
-1. In Telegram: pencil icon → **New Channel** → give it a name → set to **Private** → Create
-2. Add your bot as an **Administrator**:
+1. Telegram → pencil icon → **New Channel** → name it → set **Private** → Create
+2. Add your bot as Administrator:
    - Open channel → tap channel name → **Administrators** → **Add Admin**
-   - Search for your bot username and select it
-   - Enable exactly these three permissions:
-     - ✅ Add Members
-     - ✅ Ban Users
-     - ✅ Invite Users via Link
-   - Tap Save
-
-### Get the Channel ID
-1. Forward any message from your channel to **@userinfobot**
-2. It replies with something like `Chat ID: -1001234567890`
-3. **Save the full number including the minus sign as `CHANNEL_ID`**
+   - Search your bot → enable: ✅ Add Members ✅ Ban Users ✅ Invite Users via Link → Save
+3. Get Channel ID — forward any message from the channel to **@userinfobot**
+   - It replies with `Chat ID: -1001234567890` → save as **`CHANNEL_ID`**
 
 ---
 
 ## STEP 3 — Set Up PayPal
 
-### 3a. Ensure you have a PayPal Business account
-Personal PayPal accounts cannot use the Subscriptions API. Go to [paypal.com](https://paypal.com) and upgrade to Business if needed — it's free.
+1. Go to [developer.paypal.com](https://developer.paypal.com) — log in with your **Business** account
+2. **Dashboard → My Apps & Credentials → Sandbox tab → Create App**
+3. Name it → Create App → copy **Client ID** and **Secret**
 
-### 3b. Create a REST API App (Sandbox first)
-1. Go to [developer.paypal.com](https://developer.paypal.com) and log in
-2. Go to **Dashboard → My Apps & Credentials**
-3. Stay on the **Sandbox** tab for now
-4. Click **Create App**
-5. Name it (e.g. `Telegram Subscription Bot`) → click **Create App**
-6. Copy the **Client ID** and **Secret** → save as `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`
-
-### 3c. Create a Live App (for production)
-Once testing is complete, repeat step 3b on the **Live** tab to get your live credentials. You will swap these in later.
+> Personal PayPal accounts cannot use the Subscriptions API. Upgrade free at paypal.com.
 
 ---
 
-## STEP 4 — Install & Configure the Bot
+## STEP 4 — Set Up Supabase (Free Database)
 
-### 4a. Get the code
+Supabase gives you a free hosted PostgreSQL database — no credit card needed.
+
+### 4a. Create account
+1. Go to [supabase.com](https://supabase.com) → **Start for free**
+2. Sign up with GitHub or email — no credit card required
+
+### 4b. Create a project
+1. Click **New Project**
+2. Fill in:
+   - **Name:** `subscription-bot`
+   - **Database Password:** create a strong password → **save it somewhere safe**
+   - **Region:** pick closest to your users
+3. Click **Create new project** — takes about 1 minute to provision
+
+### 4c. Get the connection string
+1. In your project → left sidebar → **Project Settings** (gear icon)
+2. Click **Database**
+3. Scroll down to **Connection string** → select **URI** tab
+4. Copy the string — it looks like:
+   ```
+   postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxxxxxxxx.supabase.co:5432/postgres
+   ```
+5. Replace `[YOUR-PASSWORD]` with the password you created in step 4b
+6. Save this as **`DATABASE_URL`**
+
+> You do NOT need to create any tables manually. The bot creates all tables automatically on first startup.
+
+---
+
+## STEP 5 — Push Code to GitHub
+
+1. Create a new repository at [github.com](https://github.com) — name it `telegram-subscription-bot`
+2. Make sure it is **Private** (your code contains sensitive references)
+3. In your local project folder run:
+
 ```bash
-git clone https://github.com/your-username/telegram-subscription-bot.git
-cd telegram-subscription-bot
-npm install
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/telegram-subscription-bot.git
+git push -u origin main
 ```
 
-### 4b. Create your environment file
+> `.env` is in `.gitignore` — never commit it. Your secrets stay local.
+
+---
+
+## STEP 6 — Configure Environment Variables Locally
+
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` in any text editor and fill in:
+Open `.env` and fill in all values:
 ```env
-# Telegram
 BOT_TOKEN=7123456789:AAF...
 CHANNEL_ID=-1001234567890
 BOT_USERNAME=mychannelsubbot
 
-# PayPal — use sandbox credentials first
 PAYPAL_CLIENT_ID=AaBbCcDd...
 PAYPAL_CLIENT_SECRET=EeFfGgHh...
 PAYPAL_MODE=sandbox
 
-# Leave these blank for now — filled in step 4c
-PAYPAL_PLAN_ID_MONTHLY=
-PAYPAL_PLAN_ID_QUARTERLY=
-PAYPAL_PLAN_ID_BIANNUAL=
-PAYPAL_PLAN_ID_ANNUAL=
+PAYPAL_PLAN_ID_MONTHLY=       ← fill after step 7
+PAYPAL_PLAN_ID_QUARTERLY=     ← fill after step 7
+PAYPAL_PLAN_ID_BIANNUAL=      ← fill after step 7
+PAYPAL_PLAN_ID_ANNUAL=        ← fill after step 7
 
-# Server — fill WEBHOOK_DOMAIN after deploying in step 5
-WEBHOOK_DOMAIN=https://your-app.onrender.com
-WEBHOOK_SECRET=paste-any-random-32-character-string-here
+DATABASE_URL=postgresql://postgres:yourpassword@db.xxxx.supabase.co:5432/postgres
 
-# Database
-DB_PATH=./data/subscriptions.db
+PORT=3000
+WEBHOOK_DOMAIN=https://your-app.koyeb.app   ← fill after step 8
+WEBHOOK_SECRET=any-random-32-character-string
 ```
 
-### 4c. Create the PayPal Billing Plans — run this ONCE
+---
+
+## STEP 7 — Create PayPal Billing Plans
+
+Run this once on your local machine (with `.env` filled in):
+
 ```bash
+npm install
 node src/paypal/createPlan.js
 ```
 
-The script creates one PayPal product and all 4 billing plans. Output looks like:
+Output:
 ```
+✅ Connected to Supabase PostgreSQL
 ✅ Product created: PROD-XXXXXXXXXXXX
-✅ Plan created: P-1AB23456CD789012EF345678  (monthly)
-✅ Plan created: P-2CD34567EF890123GH456789  (quarterly)
-✅ Plan created: P-3EF45678GH901234IJ567890  (biannual)
-✅ Plan created: P-4GH56789IJ012345KL678901  (annual)
+✅ Plan created: P-1AB...  (monthly)
+✅ Plan created: P-2CD...  (quarterly)
+✅ Plan created: P-3EF...  (biannual)
+✅ Plan created: P-4GH...  (annual)
 
-─────────────────────────────────────
 Add these to your .env:
-PAYPAL_PLAN_ID_MONTHLY=P-1AB23456CD789012EF345678
-PAYPAL_PLAN_ID_QUARTERLY=P-2CD34567EF890123GH456789
-PAYPAL_PLAN_ID_BIANNUAL=P-3EF45678GH901234IJ567890
-PAYPAL_PLAN_ID_ANNUAL=P-4GH56789IJ012345KL678901
-─────────────────────────────────────
+PAYPAL_PLAN_ID_MONTHLY=P-1AB...
+PAYPAL_PLAN_ID_QUARTERLY=P-2CD...
+PAYPAL_PLAN_ID_BIANNUAL=P-3EF...
+PAYPAL_PLAN_ID_ANNUAL=P-4GH...
 ```
 
-Copy those 4 lines into your `.env` file.
-
-> ⚠️ When you switch to live PayPal credentials later, you must re-run this script with `PAYPAL_MODE=live` and update the 4 plan IDs again — sandbox and live plan IDs are different.
+Paste the 4 plan IDs into your `.env`, then push to GitHub:
+```bash
+git add .
+git commit -m "Add PayPal plan IDs"
+git push
+```
 
 ---
 
-## STEP 5 — Deploy to Render
+## STEP 8 — Deploy to Koyeb
 
-### 5a. Push to GitHub
-```bash
-git add .
-git commit -m "Initial bot setup"
-git push origin main
-```
+Koyeb is free with no credit card required — just an email signup.
 
-> `.env` is already in `.gitignore` — never commit it. Your secrets stay local.
+### 8a. Create account
+1. Go to [koyeb.com](https://koyeb.com) → **Get Started Free**
+2. Sign up with GitHub or email — no credit card
 
-### 5b. Create a Web Service on Render
-1. Go to [dashboard.render.com](https://dashboard.render.com)
-2. Click **New → Web Service**
-3. Connect your GitHub account and select your repository
-4. Render detects `render.yaml` automatically. Confirm these settings:
-   - **Runtime:** Node
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-5. Click **Create Web Service**
+### 8b. Create a new App
+1. In Koyeb dashboard → **Create App**
+2. Select **GitHub** as the source
+3. Connect your GitHub account if not already
+4. Select your `telegram-subscription-bot` repository
+5. Select branch: `main`
 
-### 5c. Add a Persistent Disk for SQLite
-Render's filesystem resets on every redeploy, which would wipe your database. A disk prevents this.
+### 8c. Configure the service
+- **Service name:** `subscription-bot`
+- **Instance type:** Free
+- **Region:** pick any (Frankfurt or Washington are reliable)
+- **Build command:** `npm install`
+- **Run command:** `node src/index.js`
+- **Port:** `3000`
 
-1. In your service dashboard → **Disks** → **Add Disk**
-2. Set:
-   - **Name:** `bot-data`
-   - **Mount Path:** `/opt/render/project/src/data`
-   - **Size:** 1 GB (sufficient, and within free tier)
-3. Click **Save**
-4. In **Environment**, update `DB_PATH` to:
-   ```
-   DB_PATH=/opt/render/project/src/data/subscriptions.db
-   ```
-
-### 5d. Set Environment Variables in Render
-Go to your service → **Environment** → **Add Environment Variable** and add every key from your `.env`:
+### 8d. Add environment variables
+In the **Environment variables** section, add every variable from your `.env`:
 
 | Key | Value |
 |-----|-------|
-| `BOT_TOKEN` | Your bot token from BotFather |
-| `CHANNEL_ID` | Your channel ID (e.g. `-1001234567890`) |
+| `BOT_TOKEN` | Your bot token |
+| `CHANNEL_ID` | Your channel ID |
 | `BOT_USERNAME` | Bot username without @ |
-| `PAYPAL_CLIENT_ID` | From Step 3b |
-| `PAYPAL_CLIENT_SECRET` | From Step 3b |
-| `PAYPAL_MODE` | `sandbox` for now, `live` later |
-| `PAYPAL_PLAN_ID_MONTHLY` | From Step 4c |
-| `PAYPAL_PLAN_ID_QUARTERLY` | From Step 4c |
-| `PAYPAL_PLAN_ID_BIANNUAL` | From Step 4c |
-| `PAYPAL_PLAN_ID_ANNUAL` | From Step 4c |
-| `WEBHOOK_DOMAIN` | Your Render URL — see step 5e |
-| `WEBHOOK_SECRET` | Same random string from your `.env` |
-| `DB_PATH` | `/opt/render/project/src/data/subscriptions.db` |
+| `PAYPAL_CLIENT_ID` | From Step 3 |
+| `PAYPAL_CLIENT_SECRET` | From Step 3 |
+| `PAYPAL_MODE` | `sandbox` |
+| `PAYPAL_PLAN_ID_MONTHLY` | From Step 7 |
+| `PAYPAL_PLAN_ID_QUARTERLY` | From Step 7 |
+| `PAYPAL_PLAN_ID_BIANNUAL` | From Step 7 |
+| `PAYPAL_PLAN_ID_ANNUAL` | From Step 7 |
+| `DATABASE_URL` | From Step 4c |
+| `WEBHOOK_SECRET` | Your random string |
+| `WEBHOOK_DOMAIN` | Leave blank for now — fill after first deploy |
+| `PORT` | `3000` |
 
-### 5e. Set WEBHOOK_DOMAIN
-After the first deploy finishes, Render shows your public URL at the top of the service page — something like `https://telegram-subscription-bot.onrender.com`.
+### 8e. Deploy
+Click **Deploy**. First deploy takes 2-3 minutes.
 
-1. Copy that URL
-2. Go to **Environment** → update `WEBHOOK_DOMAIN` to that URL
-3. Click **Save Changes** → Render redeploys automatically
+### 8f. Get your public URL and update WEBHOOK_DOMAIN
+1. After deploy finishes, Koyeb shows your URL at the top — looks like `https://subscription-bot-yourname.koyeb.app`
+2. Copy it
+3. In Koyeb → your service → **Settings → Environment variables**
+4. Set `WEBHOOK_DOMAIN` = `https://subscription-bot-yourname.koyeb.app`
+5. Click **Save** — Koyeb redeploys automatically
 
 ---
 
-## STEP 6 — Register the PayPal Webhook
+## STEP 9 — Register the PayPal Webhook
 
-This tells PayPal where to send subscription events (payment success, cancellation, etc).
-
-1. Go to [developer.paypal.com](https://developer.paypal.com) → **Dashboard → Webhooks**
-2. Make sure you're on the **Sandbox** tab
-3. Click **Add Webhook**
-4. Enter the URL: `https://your-app.onrender.com/paypal/webhook`
-5. Under **Event Types**, select all of these:
+1. Go to [developer.paypal.com](https://developer.paypal.com) → **Dashboard → Webhooks → Sandbox tab**
+2. Click **Add Webhook**
+3. URL: `https://your-app.koyeb.app/paypal/webhook`
+4. Select all 7 events:
    - ✅ `BILLING.SUBSCRIPTION.ACTIVATED`
    - ✅ `BILLING.SUBSCRIPTION.CANCELLED`
    - ✅ `BILLING.SUBSCRIPTION.EXPIRED`
@@ -283,130 +261,91 @@ This tells PayPal where to send subscription events (payment success, cancellati
    - ✅ `BILLING.SUBSCRIPTION.RENEWED`
    - ✅ `BILLING.SUBSCRIPTION.SUSPENDED`
    - ✅ `PAYMENT.SALE.COMPLETED`
-6. Click **Save**
-
-> You will repeat this on the **Live** tab when you go to production.
+5. Click **Save**
 
 ---
 
-## STEP 7 — Test with Sandbox
+## STEP 10 — Test with PayPal Sandbox
 
-### 7a. Get a sandbox buyer account
 1. Go to [developer.paypal.com → Sandbox → Accounts](https://developer.paypal.com/dashboard/accounts)
-2. There is a pre-created buyer account listed — click the three-dot menu → **View/Edit**
-3. Note the email and password
+2. Find the pre-created buyer account → three dots → **View/Edit** → note email + password
+3. Open your bot → `/subscribe` → pick a plan → tap PayPal button
+4. Log in with sandbox buyer credentials → approve
 
-### 7b. Run a full test
-1. Open your bot in Telegram
-2. Send `/subscribe`
-3. Choose any plan
-4. Tap the PayPal button — log in with the sandbox buyer credentials
-5. Approve the subscription
-
-**Verify all of this happens:**
-- [ ] You are redirected back to a success page
-- [ ] The bot sends you a "Subscription Active" message in Telegram
-- [ ] The bot sends a single-use channel invite link
-- [ ] You can join the channel using that link
-- [ ] `/status` shows the correct plan and next payment date
-
-### 7c. Test cancellation
-1. Send `/cancel` to the bot
-2. Verify you receive a cancellation confirmation
-3. Verify you are removed from the channel
+**Verify all of this works:**
+- [ ] Bot sends "Subscription Active" message
+- [ ] Bot sends a channel invite link
+- [ ] You can join the channel
+- [ ] `/status` shows plan + next payment date
+- [ ] `/cancel` removes you from channel
 
 ---
 
-## STEP 8 — Go Live
+## STEP 11 — Go Live with Real Payments
 
-Once sandbox testing passes, follow these steps to switch to real payments.
+### 11a. Get live PayPal credentials
+- [developer.paypal.com](https://developer.paypal.com) → **Live tab** → Create App → copy Client ID + Secret
 
-**8a. Swap PayPal credentials**
-1. In [developer.paypal.com](https://developer.paypal.com), go to the **Live** tab → create a Live app
-2. Copy the live Client ID and Secret
-3. In Render environment variables, update:
-   - `PAYPAL_CLIENT_ID` → live client ID
-   - `PAYPAL_CLIENT_SECRET` → live secret
-   - `PAYPAL_MODE` → `live`
-
-**8b. Re-create billing plans for Live**
+### 11b. Re-create billing plans for Live
 ```bash
-# In your local .env, temporarily set:
+# Update your local .env temporarily:
+PAYPAL_CLIENT_ID=<live client id>
+PAYPAL_CLIENT_SECRET=<live secret>
 PAYPAL_MODE=live
-PAYPAL_CLIENT_ID=<your live client id>
-PAYPAL_CLIENT_SECRET=<your live secret>
 
 node src/paypal/createPlan.js
 ```
-Copy the 4 new plan IDs and update them in Render environment variables:
-- `PAYPAL_PLAN_ID_MONTHLY`
-- `PAYPAL_PLAN_ID_QUARTERLY`
-- `PAYPAL_PLAN_ID_BIANNUAL`
-- `PAYPAL_PLAN_ID_ANNUAL`
+Copy the 4 new live plan IDs.
 
-**8c. Register the Live webhook**
-1. In PayPal Developer Dashboard → switch to **Live** tab → **Webhooks**
-2. Add the same webhook URL: `https://your-app.onrender.com/paypal/webhook`
-3. Select the same 7 event types as in Step 6
+### 11c. Update Koyeb environment variables
+In Koyeb → your service → **Settings → Environment variables**, update:
+- `PAYPAL_CLIENT_ID` → live client ID
+- `PAYPAL_CLIENT_SECRET` → live secret
+- `PAYPAL_MODE` → `live`
+- All 4 `PAYPAL_PLAN_ID_*` → new live plan IDs
 
-**8d. Redeploy**
-In Render, click **Manual Deploy → Deploy latest commit** to apply all env changes.
+### 11d. Register Live webhook
+- PayPal Developer → **Live tab** → Webhooks → Add same URL + same 7 events
+
+Koyeb redeploys automatically after saving env changes.
 
 **Go-live checklist:**
 - [ ] `PAYPAL_MODE=live`
-- [ ] Live Client ID and Secret set in Render
-- [ ] `createPlan.js` re-run with live credentials
-- [ ] All 4 live plan IDs updated in Render
-- [ ] Live webhook registered in PayPal dashboard
-- [ ] Full test with a real card done
+- [ ] Live Client ID + Secret set in Koyeb
+- [ ] `createPlan.js` re-run on live → 4 new plan IDs in Koyeb
+- [ ] Live PayPal webhook registered
+- [ ] Test with a real card
 
 ---
 
-## STEP 9 — Alternative: Deploy to Railway
+## 🔄 Deploying Updates
 
-If you prefer Railway over Render:
+Push to GitHub → Koyeb redeploys automatically. That's it.
 
-1. Go to [railway.app](https://railway.app) → **New Project → Deploy from GitHub**
-2. Select your repository
-3. Add all environment variables under the **Variables** tab
-4. Add a **Volume** for database persistence:
-   - Mount path: `/app/data`
-   - Update `DB_PATH=/app/data/subscriptions.db` in variables
-5. Go to **Settings → Domains** → **Generate Domain**
-6. Copy that domain and set it as `WEBHOOK_DOMAIN`
-
-Everything else (PayPal setup, webhook registration, go-live steps) is identical to above.
+```bash
+git add .
+git commit -m "your change"
+git push
+```
 
 ---
 
-## 🤖 Bot Commands Reference
+## 🛠️ Troubleshooting
 
-| Command | What it does |
-|---------|-------------|
-| `/start` | Welcome message explaining the bot |
-| `/subscribe` | Shows all 4 plan buttons → generates PayPal approval link |
-| `/status` | Shows current plan, status, and next auto-pay date |
-| `/cancel` | Cancels auto-pay via PayPal and removes user from channel |
-| `/help` | Lists all commands |
+**Bot doesn't respond**
+→ Check Koyeb logs (your service → **Deployments → View logs**). Verify `BOT_TOKEN` and `WEBHOOK_DOMAIN` are correctly set.
 
----
+**Database connection error on startup**
+→ Verify `DATABASE_URL` is correct and includes your actual password (not `[YOUR-PASSWORD]`). Check Supabase project is not paused (free projects pause after 1 week of inactivity — unpause in Supabase dashboard).
 
-## ⚠️ Troubleshooting
+**"Plan not configured" error**
+→ You haven't run `node src/paypal/createPlan.js` or forgot to add the 4 plan IDs to Koyeb's environment variables.
 
-**Bot doesn't respond to messages**
-→ Check `BOT_TOKEN` is correct. Check Render logs for startup errors. Make sure `WEBHOOK_DOMAIN` is set to your live Render URL and the service has been redeployed after setting it.
+**PayPal webhooks not arriving**
+→ Verify the webhook URL in PayPal matches your Koyeb URL exactly. Test it: open `https://your-app.koyeb.app/health` in your browser — should return `{"status":"ok"}`.
 
-**"This plan isn't configured yet" error**
-→ You haven't run `node src/paypal/createPlan.js`, or you forgot to copy the 4 plan IDs into your environment variables.
+**Supabase project paused**
+→ Free Supabase projects pause after 7 days of no activity. Go to [supabase.com](https://supabase.com) → your project → click **Restore**. The bot will resume working immediately. To avoid this, the bot's daily cron job keeps the DB active automatically.
 
-**Invite link sent but user can't join the channel**
-→ The bot must be an Administrator in the channel with **Add Members** and **Invite Users via Link** permissions enabled. Double-check this in channel settings.
-
-**PayPal webhooks not arriving (events not processing)**
-→ Verify the webhook URL in PayPal dashboard exactly matches your Render URL. Check that `/health` returns 200. Ensure you selected all 7 event types when registering the webhook.
-
-**Database is empty after a Render redeploy**
-→ You haven't attached a persistent disk, or `DB_PATH` is not pointing to the disk's mount path. See Step 5c.
-
-**Sandbox payments work but live payments don't**
-→ You are likely still using sandbox plan IDs with live credentials. Re-run `node src/paypal/createPlan.js` with `PAYPAL_MODE=live` and update all 4 plan IDs in Render.
+**Sandbox works but live payments fail**
+→ You're using sandbox plan IDs with live credentials. Re-run `node src/paypal/createPlan.js` with `PAYPAL_MODE=live` and update all 4 plan IDs in Koyeb.

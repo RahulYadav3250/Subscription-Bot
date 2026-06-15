@@ -1,7 +1,4 @@
 // src/handlers/webhooks.js
-// Handles PayPal subscription lifecycle webhook events.
-// PayPal manages autopay natively — we just listen and keep our DB in sync.
-
 import {
   getSubscriptionByPaypalId,
   activateSubscription,
@@ -17,11 +14,11 @@ export async function handlePayPalWebhook(bot, payload) {
   const eventId   = payload.id;
   const eventType = payload.event_type;
 
-  if (isEventProcessed(eventId)) {
+  if (await isEventProcessed(eventId)) {
     console.log(`[paypal-webhook] Duplicate ignored: ${eventId}`);
     return;
   }
-  recordEvent(eventId, eventType, payload, "paypal");
+  await recordEvent(eventId, eventType, payload, "paypal");
 
   const resource       = payload.resource ?? {};
   const subscriptionId = resource.id ?? resource.billing_agreement_id;
@@ -31,7 +28,6 @@ export async function handlePayPalWebhook(bot, payload) {
     case "BILLING.SUBSCRIPTION.ACTIVATED":
       await onActivated(bot, subscriptionId);
       break;
-    // PayPal fires PAYMENT.SALE.COMPLETED on every successful charge (trial end + every renewal)
     case "PAYMENT.SALE.COMPLETED":
     case "BILLING.SUBSCRIPTION.RENEWED":
       await onPaymentSuccess(bot, subscriptionId, resource);
@@ -53,14 +49,13 @@ export async function handlePayPalWebhook(bot, payload) {
   }
 }
 
-// ── Return / Cancel redirect handlers ────────────────────────────────────────
 export async function handlePayPalReturn(bot, telegramId) {
   try {
     await bot.api.sendMessage(
       telegramId,
       "🎉 *Payment Approved!*\n\n" +
-      "PayPal is confirming your subscription. You'll receive your channel invite link in a few seconds.\n\n" +
-      "🔄 *Auto-pay is ON* — your subscription will renew automatically. No action needed!\n\n" +
+      "PayPal is confirming your subscription. Your channel invite link will arrive in a few seconds.\n\n" +
+      "🔄 *Auto-pay is ON* — renews automatically, nothing to do!\n\n" +
       "Use /status to check anytime.",
       { parse_mode: "Markdown" }
     );
@@ -90,12 +85,11 @@ async function onActivated(bot, subscriptionId) {
     return;
   }
 
-  // custom_id = "telegramId:planId"
   const [rawId, planId = "monthly"] = (detail.custom_id ?? "").split(":");
   const telegramId = parseInt(rawId);
   if (!telegramId) return console.error("[onActivated] No custom_id on subscription");
 
-  const plan = getPlanById(planId, false);
+  const plan = getPlanById(planId);
   const now  = new Date();
 
   const trialEnd  = plan?.hasTrial ? new Date(now.getTime() + plan.trialDays * 86400000) : null;
@@ -105,12 +99,12 @@ async function onActivated(bot, subscriptionId) {
 
   const status = plan?.hasTrial ? "trialing" : "active";
 
-  activateSubscription({
+  await activateSubscription({
     paypal_sub_id:      subscriptionId,
     telegram_id:        telegramId,
     trial_end:          trialEnd?.toISOString() ?? null,
     current_period_end: periodEnd.toISOString(),
-    next_charge_at:     periodEnd.toISOString(), // PayPal charges at next_billing_time
+    next_charge_at:     periodEnd.toISOString(),
     status,
   });
 
@@ -118,7 +112,7 @@ async function onActivated(bot, subscriptionId) {
 
   try {
     const inviteLink = await createInviteLink(bot, telegramId);
-    const trialLine = plan?.hasTrial
+    const trialLine  = plan?.hasTrial
       ? `🎁 *${plan.trialDays}-day free trial* started — no charge today!\n📅 First charge: *${fmtDate(trialEnd)}*\n\n`
       : `📅 Active until: *${fmtDate(periodEnd)}* — renews automatically\n\n`;
 
@@ -137,23 +131,21 @@ async function onActivated(bot, subscriptionId) {
 }
 
 async function onPaymentSuccess(bot, subscriptionId, resource) {
-  const sub = getSubscriptionByPaypalId(subscriptionId);
+  const sub = await getSubscriptionByPaypalId(subscriptionId);
   if (!sub) return console.warn("[onPaymentSuccess] Unknown subscription:", subscriptionId);
 
-  const plan    = getPlanById(sub.plan_id, false);
-  // Use PayPal's next_billing_time if available in resource, otherwise estimate
+  const plan    = getPlanById(sub.plan_id);
   const nextEnd = resource?.billing_info?.next_billing_time
     ? new Date(resource.billing_info.next_billing_time)
     : new Date(Date.now() + (plan?.periodDays ?? 30) * 86400000);
 
-  updateSubscriptionStatus({
+  await updateSubscriptionStatus({
     paypal_sub_id:      subscriptionId,
     status:             "active",
     current_period_end: nextEnd.toISOString(),
     next_charge_at:     nextEnd.toISOString(),
   });
 
-  // Re-add user in case they were briefly removed
   await addUserToChannel(bot, sub.telegram_id);
 
   try {
@@ -169,15 +161,15 @@ async function onPaymentSuccess(bot, subscriptionId, resource) {
 }
 
 async function onPaymentFailed(bot, subscriptionId) {
-  const sub = getSubscriptionByPaypalId(subscriptionId);
+  const sub = await getSubscriptionByPaypalId(subscriptionId);
   if (!sub) return;
 
   try {
     await bot.api.sendMessage(
       sub.telegram_id,
       `⚠️ *Auto-Pay Failed*\n\n` +
-      `PayPal couldn't charge your payment method for renewal.\n\n` +
-      `PayPal will automatically retry. Please check your PayPal payment method to avoid losing access.\n\n` +
+      `PayPal couldn't charge your payment method.\n\n` +
+      `PayPal will retry automatically — please check your PayPal payment method.\n\n` +
       `Use /cancel if you wish to cancel.`,
       { parse_mode: "Markdown" }
     );
@@ -185,54 +177,48 @@ async function onPaymentFailed(bot, subscriptionId) {
 }
 
 async function onSuspended(bot, subscriptionId) {
-  const sub = getSubscriptionByPaypalId(subscriptionId);
+  const sub = await getSubscriptionByPaypalId(subscriptionId);
   if (!sub) return;
 
-  updateSubscriptionStatus({ paypal_sub_id: subscriptionId, status: "suspended", current_period_end: null, next_charge_at: null });
+  await updateSubscriptionStatus({ paypal_sub_id: subscriptionId, status: "suspended", current_period_end: null, next_charge_at: null });
   await removeUserFromChannel(bot, sub.telegram_id);
 
   try {
     await bot.api.sendMessage(
       sub.telegram_id,
-      `🚫 *Subscription Suspended*\n\n` +
-      `After multiple failed auto-pay attempts, your subscription was suspended and you've been removed from the channel.\n\n` +
-      `Use /subscribe to start a new subscription.`,
+      `🚫 *Subscription Suspended*\n\nAfter repeated payment failures, you've been removed from the channel.\n\nUse /subscribe to resubscribe.`,
       { parse_mode: "Markdown" }
     );
   } catch (_) {}
 }
 
 async function onCancelled(bot, subscriptionId) {
-  const sub = getSubscriptionByPaypalId(subscriptionId);
+  const sub = await getSubscriptionByPaypalId(subscriptionId);
   if (!sub) return;
 
-  updateSubscriptionStatus({ paypal_sub_id: subscriptionId, status: "cancelled", current_period_end: null, next_charge_at: null });
+  await updateSubscriptionStatus({ paypal_sub_id: subscriptionId, status: "cancelled", current_period_end: null, next_charge_at: null });
   await removeUserFromChannel(bot, sub.telegram_id);
 
   try {
     await bot.api.sendMessage(
       sub.telegram_id,
-      `🚫 *Subscription Cancelled*\n\n` +
-      `Auto-pay has been turned off and you've been removed from the channel.\n\n` +
-      `Use /subscribe to resubscribe anytime.`,
+      `🚫 *Subscription Cancelled*\n\nYou've been removed from the channel.\n\nUse /subscribe to resubscribe anytime.`,
       { parse_mode: "Markdown" }
     );
   } catch (_) {}
 }
 
 async function onExpired(bot, subscriptionId) {
-  const sub = getSubscriptionByPaypalId(subscriptionId);
+  const sub = await getSubscriptionByPaypalId(subscriptionId);
   if (!sub) return;
 
-  updateSubscriptionStatus({ paypal_sub_id: subscriptionId, status: "expired", current_period_end: null, next_charge_at: null });
+  await updateSubscriptionStatus({ paypal_sub_id: subscriptionId, status: "expired", current_period_end: null, next_charge_at: null });
   await removeUserFromChannel(bot, sub.telegram_id);
 
   try {
     await bot.api.sendMessage(
       sub.telegram_id,
-      `⌛ *Subscription Expired*\n\n` +
-      `Your subscription has expired and you've been removed from the channel.\n\n` +
-      `Use /subscribe to renew.`,
+      `⌛ *Subscription Expired*\n\nYour subscription has expired and you've been removed from the channel.\n\nUse /subscribe to renew.`,
       { parse_mode: "Markdown" }
     );
   } catch (_) {}
