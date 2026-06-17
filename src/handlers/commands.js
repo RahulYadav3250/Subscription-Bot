@@ -17,8 +17,11 @@ export async function handleStart(ctx) {
   await upsertUser({ telegram_id: id, username, first_name });
 
   await ctx.reply(
-    `👋 *Welcome${first_name ? `, ${first_name}` : ""}!*\n\n` +
-    `Get exclusive access to our private channel.\n\n` +
+    `🔥 *VIP Channel* 🔥\n` +
+    `💎 Exclusive Daily Content\n` +
+    `📸 Premium Photos & Videos\n` +
+    `🎁 New Content Added Every Day\n` +
+    `Enjoy your stay! 😈\n\n` +
     `Use /subscribe to see all plans and get started.\n` +
     `Use /help to see all available commands.`,
     { parse_mode: "Markdown" }
@@ -40,16 +43,18 @@ export async function handleSubscribe(ctx) {
     );
   }
 
-  const description = PLANS.map((p) =>
-    `${p.label}  •  ${p.badge}${p.hasTrial ? `  •  ${p.trialDays}-Day Free Trial` : ""}`
-  ).join("\n");
-
   const keyboard = PLANS.map((p) => [
     { text: p.buttonText, callback_data: `plan:${p.id}` },
   ]);
 
   await ctx.reply(
-    `💳 *Choose a Subscription Plan*\n\n${description}`,
+    `💎 Choose a subscription plan below to unlock VIP access.\n\n` +
+    `🔥 Daily premium updates\n` +
+    `📸 Thousands of exclusive photos\n` +
+    `🎥 Premium video collection\n` +
+    `📚 Access to previous content archives\n` +
+    `🎁 7-Day Free Trial on eligible plans\n\n` +
+    `Select a plan below to get started! ⬇️`,
     {
       parse_mode: "Markdown",
       reply_markup: { inline_keyboard: keyboard },
